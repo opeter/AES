@@ -46,8 +46,22 @@ show_bits32(uint32_t *bytes)
     printf("(%u / %X)\n", *bytes, *bytes);
 }
 
-
-
+void
+show_polynomial(uint32_t p, uint8_t size)
+{
+    puts("Showing Polynomial: ");
+    for(int i = 0; i < size; i++)
+    {
+        if((p >> (size-1-i) & 0x1) == 1)
+            printf("%2d ", size-1-i);
+        else
+            printf("-- ");
+    }
+    printf("\n");
+    puts("*** END OF POLYNOMIAL");
+    return;
+}
+ 
 void
 multiply_polynomial(
     uint8_t *factor1,
@@ -57,7 +71,7 @@ multiply_polynomial(
 {
     *result = 0;
     uint16_t intermediate = 0;
-    for(int i = 0; i < 8; i++)
+    for(int i = 0; i < 7; i++)
     {
         uint8_t bitmask = bitmask(8-i);
         printf("Bitmask %X\t", bitmask);
@@ -65,9 +79,15 @@ multiply_polynomial(
         uint8_t shift = (*factor2 >> (7-i)) & 0x1;
         if(shift == 1)
         {
+            printf("\n\n");
+            printf("I: %d\n", 7-i);
             intermediate = *factor1;
             intermediate <<= (7-i);
+            printf("Intermediate:\n");
+            show_bits16(&intermediate);
+            show_polynomial(intermediate, 16);
             *result ^= intermediate;
+            printf("\n\n");
         }
     }
     return;
@@ -94,10 +114,18 @@ main(void)
     multiply_polynomial(&factor1, &factor2, &result);
     puts("RESULT:");
     show_bits16(&result);
+    show_polynomial(result, 16);
 
-    uint16_t looking = 0b1001110011101;
+    uint16_t looking = 0b10011100111010;
     puts("But we are looking for");
     show_bits16(&looking);
+    show_polynomial(looking, 16);
+
+    show_polynomial(0b10110110000000, 16);
+
+    puts("input was: ");
+    show_polynomial(factor1, 8);
+    show_polynomial(factor2, 8);
 
     puts("*** END OF PROGRAM");
     return 0;
