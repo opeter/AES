@@ -68,7 +68,7 @@ multiply_polynomial(uint8_t *factor1, uint8_t *factor2)
     uint16_t result = 0;
     for(int i = 0; i < 8; i++)
     {
-        if(((*factor2 >> (i)) & 0x1) == 1)
+        if(((*factor2 >> i) & 0x1) == 1)
         {
             uint16_t intermediate = *factor1;
             result ^= (intermediate <<= i);
