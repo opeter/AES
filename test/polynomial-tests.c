@@ -76,6 +76,13 @@ uint16_t
 multiply_polynomial(uint8_t *factor1, uint8_t *factor2)
 {
     uint16_t result = 0;
+    if(*factor1 == 0 || *factor2 == 0)
+        return 0;
+    if(*factor1 == 1)
+        return *factor2;
+    if(*factor2 == 1)
+        return *factor1;
+
     for(int i = 0; i < 8; i++)
     {
         if(((*factor2 >> i) & 0x1) == 1)
@@ -106,13 +113,15 @@ uint8_t
 aes_polynomial_division(uint16_t *factor)
 {
     uint16_t result = 0;
+    if(*factor == 0)
+        return 0;
 
     /* We need to find out the necessary shifts
        to start reducing the polynomial *factor
        by aes_polynomial */
     int8_t shift = get_shifts(*factor);
     result = *factor;
-    while (shift <= 8)
+    while (shift < 8 && shift >= 0)
     {
         result ^= AES_POLYNOMIAL >> shift;
         shift = get_shifts(result);
@@ -124,19 +133,20 @@ int
 main(void)
 {
     puts("*** POLYNOMIAL TESTS");
-    uint8_t factor1 = 0xb6;
-    uint8_t factor2 = 0x53;
 
-    puts("Running polynomial multiplication");
-
-    uint16_t result = 0;
-    result = multiply_polynomial(&factor1, &factor2);
-
-    puts("Running polynomial division");
-
-    uint8_t final = aes_polynomial_division(&result);
-
-    show_polynomial(final, 8);
+    printf("    0  1  2  3  4  5  6  7  8  9  A  B  C  D  E  F\n");
+    for(uint8_t i = 0; i < 16; i++)
+    {
+        printf("%2X ", i);
+        for(uint8_t j = 0; j < 16; j++)
+        {
+            uint8_t factor1 = (i << 4) | j;
+            uint8_t factor2 = 0x3;
+            uint16_t result = multiply_polynomial(&factor1, &factor2);
+            printf("%2X ", aes_polynomial_division(&result));
+        }
+        printf("\n");
+    }
 
     puts("*** END OF PROGRAM");
     return 0;
