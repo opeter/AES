@@ -118,7 +118,7 @@ main(void)
      * Simplest Generator in GF(2^8) is 0x03
     */
     uint16_t poly = 1;
-    uint16_t generator = 0xE5;
+    uint16_t generator = 0x03;
 
     /*
 
@@ -194,7 +194,6 @@ main(void)
     puts("* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *");
 
     poly = 1;
-    generator = 0xe5;
     uint8_t logarithm[16][16] = { 0 };  // 0xF * 0xF Elements
     for(int i = 1; i < 255; i++)
     {
@@ -215,7 +214,34 @@ main(void)
         puts("");
     }
 
+    generator = 0xe5;
     puts("* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *");
+    puts("* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *");
+    puts("* MULTIPLICATIVE INVERSE GF(2^8)                                                  *");
+    puts("* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *");
+    for(int i = 0; i < 256; i++)
+    {
+        if(i % 16 == 0)
+            puts("");
+        if(i == 0)
+        {
+            printf("-- ");
+            continue;
+        }
+        uint16_t log = multiply_polynomial(i, generator);
+        log = aes_polynomial_division(log);
+        log ^= 255;
+        uint8_t x = log & 0xF;
+        uint8_t y = log >> 4;
+        uint8_t mi = logarithm[y][x];
+        printf("%2X ", mi);
+    }
+    puts("");
+
+
+
+    puts("* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *");
+
 
 
     puts("END OF PROGRAM");
