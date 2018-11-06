@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <stdbool.h>
 
 #define AES_POLYNOMIAL 0b1000110110000000
 
@@ -90,35 +91,152 @@ power_polynomial(uint64_t factor, uint8_t exponent)
     return result;
 }
 
+void
+show_polynomial(uint8_t polynomial)
+{
+    bool first = true;
+    if(polynomial > 0)
+    {
+        printf("0x%02X -> ", polynomial);
+        for(int i = 0; i < 8; i++)
+            printf("%d", (polynomial >> (7-i)) & 0x1 ? 1 : 0);
+        printf(" -> ");
+        for(int i = 0; i < 8; i++)
+        {
+            uint8_t bit = (polynomial >> (7-i)) & 0x1;
+            if(bit == 1)
+            {
+                if(first == true)
+                    first = false;
+                else
+                    printf("+ ");
+                switch(7-i)
+                {
+                    case 0:
+                        printf("1");
+                        break;
+                    case 1:
+                        printf("x ");
+                        break;
+                    default:
+                        printf("x^%d ", 7-i);
+                        break;
+                }
+            }
+        }
+        puts("");
+    }
+    return;
+}
+
+struct Generator {
+    bool valid;
+    uint8_t g;
+    uint8_t field[256];
+    uint8_t identical;
+};
+
+struct Generators {
+    struct Generator generators[256-2];
+};
 
 int
 main(void)
 {
-    puts("F I E L D  G E N E R A T O R");
-
     // A generator is an element whose successive powers
     // take on every element except the zero
 
     /*
-        list the generators in Zm, m in {2..13}
+        Generate all possible generators in GF(2^8) mod P(x)
     */
-    for(int m = 2; m <= 13; m++)
+    struct Generators generators;
+
+    // Add all possible generators to the struct
+    for(int i = 2; i < 256; i++)
     {
-        printf("Z(%d)\n", m);
-        for(int generator = 6; generator > 1; generator--)
+        uint16_t r = 1;
+        struct Generator *generator = &generators.generators[i-2];
+        generator->g = i;
+        generator->identical = 0;
+        generator->valid = false;   // not yet known
+        for(int j = 0; j < 256; j++)
         {
-            for(int exp = 2; exp < 13; exp++)
-            {
-                printf("%d^%d mod %d = %d\n", generator, exp, m, (int) (power(generator, exp) % m));
-            }
-            puts("");
+            r = multiply_polynomial(r, i);
+            r = aes_polynomial_division(r);
+            generator->field[j] = r;
         }
     }
+
+    // Evaluate how many elements in each generator are unique
+    for(int i = 2; i < 256; i++)
+    {
+        struct Generator *generator = &generators.generators[i-2];
+        for(int j = 0; j < 256/2; j++)
+        {
+            // all elements *after* current position
+            // > j
+            for(int k = j+1; k < 256; k++)
+            {
+                if(generator->field[k] == generator->field[j])
+                    generator->identical++;
+            }
+            // all elements *before* current position
+            // < j
+            for(int k = 0; k < j-1; k++)
+            {
+                if(generator->field[k] == generator->field[j])
+                    generator->identical++;
+            }
+
+        }
+        /* 
+           A valid generator means that only the first and the last
+           element of the exponentiation table match each other, 
+           the rest has to be unique
+        */
+        if(generator->identical == 1)
+            generator->valid = true;
+    }
+
+    puts("* * * * * * * * * * * * * * * * * * * * * * * *");
+    puts("* VALID GENERATORS UNDER GF(2^8)              *");
+    puts("* * * * * * * * * * * * * * * * * * * * * * * *");
+    uint8_t count = 0;
+    for(int i = 2; i < 256; i++)
+    {
+        struct Generator *generator = &generators.generators[i-2];
+        if(generator->valid == true)
+        {
+            if(count % 16 == 0 && count > 0)
+                puts("");
+            count++;
+            printf("%3d ", generator->g);
+        }
+    }
+    puts("");
+    puts("* * * * * * * * * * * * * * * * * * * * * * * *");
+    printf("%d total valid generators.\n", count);
+    puts("* * * * * * * * * * * * * * * * * * * * * * * *");
+
+    puts("* * * * * * * * * * * * * * * * * * * * * * * *");
+    puts("* POLYNOMIALS OF GENERATORS UNDER GF(2^8)     *");
+    puts("* * * * * * * * * * * * * * * * * * * * * * * *");
+
+    for(int i = 2; i < 256; i++)
+    {
+        struct Generator *generator = &generators.generators[i-2];
+        if(generator->valid == true)
+            show_polynomial(generator->g);
+    }
+    puts("* * * * * * * * * * * * * * * * * * * * * * * *");
+    printf("%d total valid generators.\n", count);
+    puts("* * * * * * * * * * * * * * * * * * * * * * * *");
+
     /*
      * Simplest Generator in GF(2^8) is 0x03
     */
     uint16_t poly = 1;
-    uint16_t generator = 0x03;
+    uint16_t generator = 0xe5;
 
     /*
 
@@ -148,16 +266,10 @@ main(void)
     puts("* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *");
     puts("* EXPONENTIATION CHART OF 0xE5 IN GF(2^8) mod x^8 + x^4 + x^3 + x + 1             *");
     puts("* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *");
-    printf("     ");
-    for(int i = 0; i < 16; i++)
-        printf("0x%X  ", i);
-    puts("");
 
     for(int i = 1; i <= 256; i++)
     {
-        if(i % 16 == 1)
-            printf("0x%X ", i / 16);
-        printf("  %2X ", poly);
+        printf("%02X ", poly);
         poly = multiply_polynomial(poly, generator);
         poly = aes_polynomial_division(poly);
         if(i % 16 == 0)
@@ -209,40 +321,39 @@ main(void)
     {
         for(int x = 0; x < 16; x++)
         {
-            printf("%2X ", logarithm[y][x]);
+            printf("%02X ", logarithm[y][x]);
         }
         puts("");
     }
 
-    generator = 0xe5;
     puts("* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *");
     puts("* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *");
     puts("* MULTIPLICATIVE INVERSE GF(2^8)                                                  *");
     puts("* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *");
     for(int i = 0; i < 256; i++)
     {
-        if(i % 16 == 0)
+        if(i % 16 == 0 && i > 0)
             puts("");
         if(i == 0)
         {
             printf("-- ");
             continue;
         }
-        uint16_t log = multiply_polynomial(i, generator);
-        log = aes_polynomial_division(log);
-        log ^= 255;
-        uint8_t x = log & 0xF;
-        uint8_t y = log >> 4;
-        uint8_t mi = logarithm[y][x];
-        printf("%2X ", mi);
+        uint8_t x = i & 0xF;
+        uint8_t y = i >> 4;
+        uint8_t k = logarithm[y][x];
+        k ^= 0xFF;  // substract 255 in GF(2^8)
+        uint16_t poly = 1;
+        for(int j = 0; j < k; j++)
+        {
+            poly = multiply_polynomial(poly, generator);
+            poly = aes_polynomial_division(poly);
+        }
+        printf("%02X ", poly);
     }
     puts("");
 
-
-
     puts("* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *");
-
-
 
     puts("END OF PROGRAM");
     return 0;
