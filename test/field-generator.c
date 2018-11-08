@@ -8,7 +8,11 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#define GENERATOR 0x03  // 0x03 / x+1 is the smallest generator in AES
+
 #define AES_POLYNOMIAL 0b1000110110000000
+
+#define bitmask(x) (x) >= (UINT32_MAX) ? (0x1 >> 1) : ((uint32_t) 0x1 << (x)) - 0x1
 
 uint64_t
 power(uint64_t factor, uint8_t exponent)
@@ -129,6 +133,67 @@ show_polynomial(uint8_t polynomial)
     return;
 }
 
+void
+show_bits8(uint8_t *bytes)
+{
+    printf(".... .... .... .... .... .... ");
+    for(int i = 0; i < 8; i++)
+    {
+        printf("%d", ((*bytes >> (7-i)) & 0x1) ? 1 : 0);
+        if(i % 4 == 3)
+            printf(" ");
+    }
+    printf("(%3u / 0x%02X)\n", *bytes, *bytes);
+}
+
+/*
+ * left shift rotate a 8bit block k
+ */
+uint8_t
+lsr8(uint8_t k, uint8_t p)
+{
+    while(p--)
+        k = ((k << 1) & 0x0FE) | ((k >> 7) & 0x1);
+    return k;
+}
+
+uint8_t
+multiplicative_inverse(uint8_t input)
+{
+    if(input == 0)
+        return 0^0x63;
+
+    /*
+     * Create logarithm chart
+     */
+    uint16_t poly = 1;
+    uint8_t logarithm[16][16] = { 0 };  // 0xF * 0xF Elements
+    for(int i = 1; i < 255; i++)
+    {
+        poly = multiply_polynomial(poly, GENERATOR);
+        poly = aes_polynomial_division(poly);
+        uint8_t x = poly & 0xF;
+        uint8_t y = poly >> 4;
+        logarithm[y][x] = i;
+    }
+
+    uint8_t x = input & 0xF;
+    uint8_t y = input >> 4;
+    uint8_t k = logarithm[y][x];
+    k ^= 0xFF;  // substract 255 in GF(2^8)
+    uint16_t result = 1;
+    for(int j = 0; j < k; j++)
+    {
+        result = multiply_polynomial(result, GENERATOR);
+        result = aes_polynomial_division(result);
+    }
+    uint8_t intermediate = result;
+    for(int i = 1; i <= 4; i++)
+        result ^= lsr8(intermediate, i);
+    result ^= 0x63;
+    return result;
+}
+
 struct Generator {
     bool valid;
     uint8_t g;
@@ -236,32 +301,6 @@ main(void)
      * Simplest Generator in GF(2^8) is 0x03
     */
     uint16_t poly = 1;
-    uint16_t generator = 0xe5;
-
-    /*
-
-        Generator: 0xe5
-               | 0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f|
-            ---|--|--|--|--|--|--|--|--|--|--|--|--|--|--|--|--|---
-            00 |01 e5 4c b5 fb 9f fc 12 03 34 d4 c4 16 ba 1f 36| 00
-            10 |05 5c 67 57 3a d5 21 5a 0f e4 a9 f9 4e 64 63 ee| 10
-            20 |11 37 e0 10 d2 ac a5 29 33 59 3b 30 6d ef f4 7b| 20
-            30 |55 eb 4d 50 b7 2a 07 8d ff 26 d7 f0 c2 7e 09 8c| 30
-            40 |1a 6a 62 0b 5d 82 1b 8f 2e be a6 1d e7 9d 2d 8a| 40
-            50 |72 d9 f1 27 32 bc 77 85 96 70 08 69 56 df 99 94| 50
-            60 |a1 90 18 bb fa 7a b0 a7 f8 ab 28 d6 15 8e cb f2| 60
-            70 |13 e6 78 61 3f 89 46 0d 35 31 88 a3 41 80 ca 17| 70
-            80 |5f 53 83 fe c3 9b 45 39 e1 f5 9e 19 5e b6 cf 4b| 80
-            90 |38 04 b9 2b e2 c1 4a dd 48 0c d0 7d 3d 58 de 7c| 90
-            a0 |d8 14 6b 87 47 e8 79 84 73 3c bd 92 c9 23 8b 97| a0 
-            b0 |95 44 dc ad 40 65 86 a2 a4 cc 7f ec c0 af 91 fd| b0
-            c0 |f7 4f 81 2f 5b ea a8 1c 02 d1 98 71 ed 25 e3 24| c0
-            d0 |06 68 b3 93 2c 6f 3e 6c 0a b8 ce ae 74 b1 42 b4| d0
-            e0 |1e d3 49 e9 9c c8 c6 c7 22 6e db 20 bf 43 51 52| e0
-            f0 |66 b2 76 60 da c5 f3 f6 aa cd 9a a0 75 54 0e 01| f0 
-            ---|--|--|--|--|--|--|--|--|--|--|--|--|--|--|--|--|---
-               | 0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f|
-*/
 
     puts("* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *");
     puts("* EXPONENTIATION CHART OF 0xE5 IN GF(2^8) mod x^8 + x^4 + x^3 + x + 1             *");
@@ -270,36 +309,13 @@ main(void)
     for(int i = 1; i <= 256; i++)
     {
         printf("%02X ", poly);
-        poly = multiply_polynomial(poly, generator);
+        poly = multiply_polynomial(poly, GENERATOR);
         poly = aes_polynomial_division(poly);
         if(i % 16 == 0)
             puts("");
     }
 
     puts("* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *");
-
-    /*
-               | 0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f|
-            ---|--|--|--|--|--|--|--|--|--|--|--|--|--|--|--|--|---
-            00 |-- 00 c8 08 91 10 d0 36 5a 3e d8 43 99 77 fe 18| 00
-            10 |23 20 07 70 a1 6c 0c 7f 62 8b 40 46 c7 4b e0 0e| 10
-            20 |eb 16 e8 ad cf cd 39 53 6a 27 35 93 d4 4e 48 c3| 20
-            30 |2b 79 54 28 09 78 0f 21 90 87 14 2a a9 9c d6 74| 30
-            40 |b4 7c de ed b1 86 76 a4 98 e2 96 8f 02 32 1c c1| 40
-            50 |33 ee ef 81 fd 30 5c 13 9d 29 17 c4 11 44 8c 80| 50
-            60 |f3 73 42 1e 1d b5 f0 12 d1 5b 41 a2 d7 2c e9 d5| 60
-            70 |59 cb 50 a8 dc fc f2 56 72 a6 65 2f 9f 9b 3d ba| 70
-            80 |7d c2 45 82 a7 57 b6 a3 7a 75 4f ae 3f 37 6d 47| 80
-            90 |61 be ab d3 5f b0 58 af ca 5e fa 85 e4 4d 8a 05| 90
-            a0 |fb 60 b7 7b b8 26 4a 67 c6 1a f8 69 25 b3 db bd| a0
-            b0 |66 dd f1 d2 df 03 8d 34 d9 92 0d 63 55 aa 49 ec| b0
-            c0 |bc 95 3c 84 0b f5 e6 e7 e5 ac 7e 6e b9 f9 da 8e| c0
-            d0 |9a c9 24 e1 0a 15 6b 3a a0 51 f4 ea b2 97 9e 5d| d0
-            e0 |22 88 94 ce 19 01 71 4c a5 e3 c5 31 bb cc 1f 2d| e0
-            f0 |3b 52 6f f6 2e 89 f7 c0 68 1b 64 04 06 bf 83 38| f0 
-            ---|--|--|--|--|--|--|--|--|--|--|--|--|--|--|--|--|---
-               | 0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f|
-    */
 
     puts("* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *");
     puts("* LOGARITHM CHART OF 0xE5 IN GF(2^8) mod x^8 + x^4 + x^3 + x + 1                  *");
@@ -309,7 +325,7 @@ main(void)
     uint8_t logarithm[16][16] = { 0 };  // 0xF * 0xF Elements
     for(int i = 1; i < 255; i++)
     {
-        poly = multiply_polynomial(poly, generator);
+        poly = multiply_polynomial(poly, GENERATOR);
         poly = aes_polynomial_division(poly);
 
         uint8_t x = poly & 0xF;
@@ -346,13 +362,60 @@ main(void)
         uint16_t poly = 1;
         for(int j = 0; j < k; j++)
         {
-            poly = multiply_polynomial(poly, generator);
+            poly = multiply_polynomial(poly, GENERATOR);
             poly = aes_polynomial_division(poly);
         }
         printf("%02X ", poly);
     }
     puts("");
 
+    puts("* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *");
+    puts("* BYTE SUBSTITUTION TABLE IN AES");
+    puts("* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *");
+    uint8_t bytesub[16][16] = { 0 };
+    for(int i = 0; i < 256; i++)
+    {
+        uint8_t result = multiplicative_inverse(i);
+        uint8_t x = i & 0xF;
+        uint8_t y = i >> 4;
+        bytesub[y][x] = result;
+    }
+
+    for(int i = 0; i < 256; i++)
+    {
+        if(i % 16 == 0 && i > 0)
+            puts("");
+        uint8_t x = i & 0xF;
+        uint8_t y = i >> 4;
+        printf("%02X ", bytesub[y][x]);
+    }
+    puts("");
+    puts("* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *");
+
+    puts("* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *");
+    puts("* INVERSE BYTE SUBSTITUTION TABLE IN AES");
+    puts("* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *");
+    uint8_t inversebytesub[16][16] = { 0 };
+    for(int i = 0; i < 256; i++)
+    {
+        uint8_t x = i & 0xF;
+        uint8_t y = i >> 4;
+        uint8_t inverse = bytesub[y][x];
+        x = inverse & 0xF;
+        y = inverse >> 4;
+        inversebytesub[y][x] = i;
+    }
+
+    for(int i = 0; i < 256; i++)
+    {
+        if(i % 16 == 0 && i > 0)
+            puts("");
+        uint8_t x = i & 0xF;
+        uint8_t y = i >> 4;
+        printf("%02X ", inversebytesub[y][x]);
+    }
+
+    puts("");
     puts("* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *");
 
     puts("END OF PROGRAM");
