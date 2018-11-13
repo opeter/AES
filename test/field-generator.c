@@ -20,7 +20,8 @@ power(uint64_t factor, uint8_t exponent)
     uint64_t result = factor;
     for(int i = 1; i < exponent; i++)
         result *= factor;
-    return result;}
+    return result;
+}
 
 int8_t
 get_shifts(uint16_t factor)
