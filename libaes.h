@@ -31,7 +31,7 @@ void inv_byte_substitution();
 void inv_shift_rows();
 void inv_mix_column();
 
-void aes_encrypt();
-void aes_decrypt();
+uint8_t aes_encrypt(const uint16_t *key, const uint16_t *input, uint16_t *output);
+uint8_t aes_decrypt(const uint16_t *key, const uint16_t *input, uint16_t *output);
 
 #endif
