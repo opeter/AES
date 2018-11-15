@@ -13,7 +13,11 @@
  *      https://github.com/kokke/tiny-AES-c
  */
 
-static const uint16_t TEST_INPUT[4][16] = {
+/* We have 4 input rounds */
+#define ROUNDS 4
+
+static const uint16_t TEST_INPUT[ROUNDS][16] =
+{
     /* bc1bee22e409f96e93d7e117393172a */
     {
         0x6b, 0xc1, 0xbe, 0xe2,
@@ -44,7 +48,8 @@ static const uint16_t TEST_INPUT[4][16] = {
     }
 };
 
-static const uint16_t TEST_KEY[16] = {
+static const uint16_t TEST_KEY[16] =
+{
     /* 2b7e151628aed2a6abf7158809cf4f3c */
     0x2b, 0x7e, 0x15, 0x16,
     0x28, 0xae, 0xd2, 0xa6,
@@ -52,7 +57,8 @@ static const uint16_t TEST_KEY[16] = {
     0x09, 0xcf, 0x4f, 0x3c
 };
 
-static const uint16_t TEST_OUTPUT[4][16] = {
+static const uint16_t TEST_OUTPUT[ROUNDS][16] =
+{
     /* 3ad77bb40d7a3660a89ecaf32466ef97 */
     {
         0x3a, 0xd7, 0x7b, 0xb4,
@@ -87,6 +93,43 @@ int
 main(void)
 {
     puts("*** BEGIN AES TESTS");
+
+    /* Encryption */
+    for(int i = 0; i < ROUNDS; i++)
+    {
+        printf(" * AES Encryption Round %2d\n", i);
+        uint16_t output[16] = { 0 };
+        aes_encrypt(TEST_KEY, TEST_INPUT[0], output);
+        for(int j = 0; j < 16; j++)
+        {
+            if(output[j] != TEST_OUTPUT[i][j])
+            {
+                printf("  x Round %d, Block %2d do not match: 0x%02x != 0x%02x\n",
+                    i, j, output[j], TEST_OUTPUT[i][j]);
+            }
+            else
+                puts("  * OK");
+        }
+        puts("");
+    }
+    puts("-------------------------------------------------------------");
+    /* Decryption */
+    for(int i = 0; i < ROUNDS; i++)
+    {
+        printf(" * AES Decryption Round %2d\n", i);
+        uint16_t output[16] = { 0 };
+        aes_decrypt(TEST_KEY, TEST_OUTPUT[0], output);
+        for(int j = 0; j < 16; j++)
+        {
+            if(output[j] != TEST_INPUT[i][j])
+            {
+                printf("  x Round %d, Block %2d do not match: 0x%02x != 0x%02x\n",
+                    i, j, output[j], TEST_OUTPUT[i][j]);
+            }
+            else
+                puts("  * OK");
+        }
+    }
     puts("*** END OF PROGRAM");
     return 0;
 }
