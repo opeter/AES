@@ -21,6 +21,9 @@
 /* Section 5. Algorithm Specification, FIPS 197 */
 #define AES_ROUNDS (AES_KEY_SIZE / WORD_LENGTH) + (AES_BLOCK_SIZE / WORD_LENGTH) + 2
 
+/* Each round needs a subkey, plus 1 for the additional key whitening */
+#define AES_SUBKEYS AES_ROUNDS + 1
+
 void key_addition();
 void byte_substitution();
 void shift_rows();
