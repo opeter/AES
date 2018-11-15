@@ -9,8 +9,8 @@
 #include "libaes.h"
 
 /*
- * Test inpus taken from 
- *      https://github.com/kokke/tiny-AES-c
+ * Test inpus taken from Appendix A
+ *  Key Expansion Examples
  */
 
 /* We have 4 input rounds */
@@ -93,6 +93,11 @@ int
 main(void)
 {
     puts("*** BEGIN AES TESTS");
+
+    /* INIT */
+    aes_init(TEST_KEY);
+    puts("EXIT");
+    exit(0);
 
     /* Encryption */
     for(int i = 0; i < ROUNDS; i++)
