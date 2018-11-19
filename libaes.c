@@ -58,7 +58,7 @@ uint8_t AES_INV_BYTE_SUB[16][16] = { { 0 } };
 
 /* Multiplikation table for 0x02 in GF(2^8) */
 #if AES_CALCULATE_LOOKUP_TABLES == 0
-static const uint8_t MULTIPLY_0x2[16][16]  = {
+static const uint8_t MULTIPLY_0x2[256] = {
   // 0x0,  0x1,  0x2,  0x3,  0x4,  0x5,  0x6,  0x7,  0x8,  0x9,  0xA,  0xB,  0xC,  0xD,  0xE,  0xF,
     0x00, 0x02, 0x04, 0x06, 0x08, 0x0A, 0x0C, 0x0E, 0x10, 0x12, 0x14, 0x16, 0x18, 0x1A, 0x1C, 0x1E, // 0x0
     0x20, 0x22, 0x24, 0x26, 0x28, 0x2A, 0x2C, 0x2E, 0x30, 0x32, 0x34, 0x36, 0x38, 0x3A, 0x3C, 0x3E, // 0x1
@@ -78,12 +78,12 @@ static const uint8_t MULTIPLY_0x2[16][16]  = {
     0xFB, 0xF9, 0xFF, 0xFD, 0xF3, 0xF1, 0xF7, 0xF5, 0xEB, 0xE9, 0xEF, 0xED, 0xE3, 0xE1, 0xE7, 0xE5  // 0xF
 };
 #else
-uint8_t MULTIPLY_0x2[16][16]  = { { 0 } };
+uint8_t MULTIPLY_0x2[256]  = { 0 };
 #endif
 
 /* Multiplikation table for 0x03 in GF(2^8) */
 #if AES_CALCULATE_LOOKUP_TABLES == 0
-static const uint8_t MULTIPLY_0x3[16][16]  = {
+static const uint8_t MULTIPLY_0x3[256]  = {
   // 0x0,  0x1,  0x2,  0x3,  0x4,  0x5,  0x6,  0x7,  0x8,  0x9,  0xA,  0xB,  0xC,  0xD,  0xE,  0xF,
     0x00, 0x03, 0x06, 0x05, 0x0C, 0x0F, 0x0A, 0x09, 0x18, 0x1B, 0x1E, 0x1D, 0x14, 0x17, 0x12, 0x11, // 0x0
     0x30, 0x33, 0x36, 0x35, 0x3C, 0x3F, 0x3A, 0x39, 0x28, 0x2B, 0x2E, 0x2D, 0x24, 0x27, 0x22, 0x21, // 0x1
@@ -103,12 +103,12 @@ static const uint8_t MULTIPLY_0x3[16][16]  = {
     0x0B, 0x08, 0x0D, 0x0E, 0x07, 0x04, 0x01, 0x02, 0x13, 0x10, 0x15, 0x16, 0x1F, 0x1C, 0x19, 0x1A, // 0xF
 };
 #else
-uint8_t MULTIPLY_0x3[16][16]  ={ { 0 } };
+uint8_t MULTIPLY_0x3[256] = { 0 };
 #endif
 
 /* Macro definitions to retrieve static elements from above */
-#define AES_MULTIPLY_0x2(x) (MULTIPLY_0x2[x & 0xF][x >> 8])
-#define AES_MULTIPLY_0x3(x) (MULTIPLY_0x3[x & 0xF][x >> 8])
+#define AES_MULTIPLY_0x2(x) (MULTIPLY_0x2[(x)])
+#define AES_MULTIPLY_0x3(x) (MULTIPLY_0x3[(x)])
 
 /* AES RCON Table used during Key Schedule */
 #if AES_CALCULATE_LOOKUP_TABLES == 0
@@ -127,29 +127,24 @@ aes_encrypt(const uint8_t *key, uint8_t *state)
     // Initialize Key Schedule
     aes_init(key);
 
-    uint32_t *k = AES_KEY_SCHEDULE[0];
-
-    // Initial "Key Whitening"
-    key_addition(k, state);
+    /* Key Whitening */
+    key_addition(AES_KEY_SCHEDULE[0], state);
 
     /*
      * Last round lacks MixColumn Layer so
      * we run AES_ROUNDS -1 times
      */
-    for(int i = 0; i < AES_ROUNDS - 1; i++)
+    for(int i = 1; i < AES_ROUNDS; i++)
     {
-        /* Next subkey from key schedule */
-        k++;
         byte_substitution(state);
         shift_rows(state);
         mix_column(state);
-        key_addition(k, state);
+        key_addition(AES_KEY_SCHEDULE[i], state);
     }
     /* Last Round */
-    k++;
     byte_substitution(state);
     shift_rows(state);
-    key_addition(k, state);
+    key_addition(AES_KEY_SCHEDULE[AES_ROUNDS], state);
 
     /* AES Finished */
     return 0;
@@ -207,19 +202,18 @@ key_schedule(const uint8_t *key)
             sub[2] = sub_byte(temp >>  8 & 0xFF) << 8;
             sub[3] = sub_byte(temp       & 0xFF);
             temp = sub[0] | sub[1] | sub[2] | sub[3];
-            uint32_t r = rcon(i / AES_NK);
-            temp ^= (r << 24);
+            temp ^= rcon(i / AES_NK);
         }
         *wi = *(wi-AES_NK) ^ temp;
         wi++;
     }
-    // puts("* Key Schedule");
-    // for(int i = 0; i < AES_SUBKEYS; i++)
-    // {
-    //     for(int j = 0; j < AES_SUBKEY_PARTS; j++)
-    //         printf("0x%08x ",AES_KEY_SCHEDULE[i][j]);
-    //     puts("");
-    // }
+    puts("* Key Schedule");
+    for(int i = 0; i < AES_SUBKEYS; i++)
+    {
+        for(int j = 0; j < AES_SUBKEY_PARTS; j++)
+            printf("0x%08x ",AES_KEY_SCHEDULE[i][j]);
+        puts("");
+    }
     return 0;
 }
 
@@ -588,38 +582,52 @@ int8_t
 mix_column(uint8_t *state)
 {
     puts("* mix column");
-    /*
-        b0 b4  b8 b12
-        b1 b5  b9 b13
-        b2 b6 b10 b14
-        b3 b7 b11 b15
+    for(int i = 0; i < 4; i++)
+    {
+        /*
+            b0 b4  b8 b12
+            b1 b5  b9 b13
+            b2 b6 b10 b14
+            b3 b7 b11 b15
 
-        02 03 01 01
-        01 02 03 01
-        01 01 02 03
-        03 01 01 02
-    */
+            02 03 01 01
+            01 02 03 01
+            01 01 02 03
+            03 01 01 02
+        */
 
-    printf("state0 0x%02x -> 0x%02x (should be 0x5f)\n", state[0], AES_MULTIPLY_0x2(state[0]));
-    exit(1);
+        /* Calculations require unaltered input so 
+         * we have to keep track of the original and
+         * new states somewhere
+         */
+        uint8_t temp[4] = { 0 };
+        uint8_t *pstate = state + (i*4);
 
-    state[0] = AES_MULTIPLY_0x2(state[0]);
-    state[4] = AES_MULTIPLY_0x3(state[4]);
+        temp[0] =
+            AES_MULTIPLY_0x2(*(pstate+0)) ^ AES_MULTIPLY_0x3(*(pstate+1)) ^
+            *(pstate+2) ^ *(pstate+3);
 
-    state[5] = AES_MULTIPLY_0x2(state[5]);
-    state[9] = AES_MULTIPLY_0x3(state[9]);
+        temp[1] =
+            *(pstate+0) ^ AES_MULTIPLY_0x2(*(pstate+1)) ^
+            AES_MULTIPLY_0x3(*(pstate+2)) ^ *(pstate+3);
 
-    state[10] = AES_MULTIPLY_0x2(state[10]);
-    state[14] = AES_MULTIPLY_0x3(state[14]);
+        temp[2] =
+            *(pstate+0) ^ *(pstate+1) ^ 
+            AES_MULTIPLY_0x2(*(pstate+2)) ^ AES_MULTIPLY_0x3(*(pstate+3));
 
-    state[3]  = AES_MULTIPLY_0x3(state[3]);
-    state[15] = AES_MULTIPLY_0x2(state[15]);
+        temp[3] =
+            AES_MULTIPLY_0x3(*(pstate+0)) ^ *(pstate+1) ^
+            *(pstate+2) ^ AES_MULTIPLY_0x2(*(pstate+3));
 
-    uint8_t *pstate = state;
-    for(int i = 0; i < 16; i++)
-        printf("%02x", *(pstate++));
+        *(pstate+0) = temp[0];
+        *(pstate+1) = temp[1];
+        *(pstate+2) = temp[2];
+        *(pstate+3) = temp[3];
+
+    }
+    for(int j = 0; j < 16; j++)
+        printf("%02x", *state++);
     puts("");
-
     return 0;
 }
 
@@ -633,11 +641,11 @@ gen_multiplication(void)
         uint16_t result = 0;
         /* 0x02 */
         result = multiply_polynomial(2, i);
-        MULTIPLY_0x2[i & 0xF][i >> 8] = aes_polynomial_division(&result);
+        MULTIPLY_0x2[i] = aes_polynomial_division(&result);
 
         /* 0x03 */
         result = multiply_polynomial(3, i);
-        MULTIPLY_0x3[i & 0xF][i >> 8] = aes_polynomial_division(&result);
+        MULTIPLY_0x3[i] = aes_polynomial_division(&result);
     }
     return;
 }
