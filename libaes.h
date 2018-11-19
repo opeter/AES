@@ -67,15 +67,16 @@ uint16_t exp_polynomial(uint16_t factor, uint8_t exponent);
 void gen_rcon_table(void);
 void gen_bytesub(void);
 void gen_inv_bytesub(void);
+void gen_multiplication(void);
 #endif
 
 void rotate_word(uint32_t *aes_word);
 
-void key_addition();
-void byte_substitution();
-void shift_rows();
-void mix_column();
-uint8_t key_schedule(const uint16_t *key);
+int8_t key_addition(uint32_t *key, uint8_t *state);
+int8_t byte_substitution(uint8_t *state);
+int8_t shift_rows(uint8_t *state);
+int8_t mix_column(uint8_t *state);
+int8_t key_schedule(const uint8_t *key);
 
 uint8_t sub_byte(uint8_t b);
 uint8_t inv_sub_byte(uint8_t b);
@@ -85,8 +86,8 @@ void inv_byte_substitution();
 void inv_shift_rows();
 void inv_mix_column();
 
-uint8_t aes_init(const uint16_t *key);
-uint8_t aes_encrypt(const uint16_t *key, const uint16_t *input, uint16_t *output);
-uint8_t aes_decrypt(const uint16_t *key, const uint16_t *input, uint16_t *output);
+uint8_t aes_init(const uint8_t *key);
+uint8_t aes_encrypt(const uint8_t *key, uint8_t *state);
+uint8_t aes_decrypt(const uint8_t *key, uint8_t *state);
 
 #endif
