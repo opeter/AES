@@ -417,6 +417,41 @@ main(void)
     }
 
     puts("");
+
+    puts("* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *");
+    puts("* MULTIPLIKATION TABLE FOR 0x02");
+    puts("* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *");
+    uint8_t multi2[256] = { 0 };
+    for(int i = 0; i < 256; i++)
+    {
+        multi2[i] = aes_polynomial_division(multiply_polynomial(2, i));
+    }
+
+    for(int i = 0; i < 256; i++)
+    {
+        if(i % 16 == 0 && i > 0)
+            puts("");
+        printf("0x%02X, ", multi2[i]);
+    }
+    puts("");
+    puts("* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *");
+
+    puts("* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *");
+    puts("* MULTIPLIKATION TABLE FOR 0x03");
+    puts("* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *");
+    uint8_t multi3[256] = { 0 };
+    for(int i = 0; i < 256; i++)
+    {
+        multi3[i] = aes_polynomial_division(multiply_polynomial(3, i));
+    }
+
+    for(int i = 0; i < 256; i++)
+    {
+        if(i % 16 == 0 && i > 0)
+            puts("");
+        printf("0x%02X, ", multi3[i]);
+    }
+    puts("");
     puts("* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *");
 
     puts("END OF PROGRAM");
