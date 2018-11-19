@@ -80,7 +80,6 @@ int8_t key_schedule(const uint8_t *key);
 
 uint8_t sub_byte(uint8_t b);
 uint8_t inv_sub_byte(uint8_t b);
-uint32_t rcon(uint8_t i);
 
 void inv_byte_substitution();
 void inv_shift_rows();

@@ -119,6 +119,8 @@ static const uint32_t AES_RCON[10] = {
 #else
 uint32_t AES_RCON[10] = { 0 };
 #endif
+/* Macro definitions to retrieve static elements from above */
+#define AES_RCON(x) (AES_RCON[(x)])
 
 /* Main AES Encryption Routine */
 uint8_t
@@ -202,7 +204,7 @@ key_schedule(const uint8_t *key)
             sub[2] = sub_byte(temp >>  8 & 0xFF) << 8;
             sub[3] = sub_byte(temp       & 0xFF);
             temp = sub[0] | sub[1] | sub[2] | sub[3];
-            temp ^= rcon(i / AES_NK);
+            temp ^= AES_RCON(i / AES_NK);
         }
         *wi = *(wi-AES_NK) ^ temp;
         wi++;
@@ -390,13 +392,6 @@ gen_rcon_table(void)
     return;
 }
 #endif
-
-/* Return RCON value for current run in Key Schedule */
-uint32_t
-rcon(uint8_t i)
-{
-    return AES_RCON[i];
-}
 
 /* Return value of byte substitutin table */
 uint8_t
