@@ -13,40 +13,41 @@ main(void)
 
     /* INIT */
     aes_init(TEST_KEY);
-    puts("EXIT");
-    exit(0);
 
     /* Encryption */
     for(int i = 0; i < ROUNDS; i++)
     {
         printf(" * AES Encryption Round %2d\n", i);
-        uint16_t output[16] = { 0 };
-        aes_encrypt(TEST_KEY, TEST_INPUT[0], output);
+        uint8_t state[16] = { 0 };
+        memcpy(state, TEST_INPUT, 16U);
+        aes_encrypt(TEST_KEY, state);
         for(int j = 0; j < 16; j++)
         {
-            if(output[j] != TEST_OUTPUT[i][j])
+            if(state[j] != TEST_OUTPUT[i][j])
             {
                 printf("  x Round %d, Block %2d do not match: 0x%02x != 0x%02x\n",
-                    i, j, output[j], TEST_OUTPUT[i][j]);
+                    i, j, state[j], TEST_OUTPUT[i][j]);
             }
             else
                 puts("  * OK");
         }
         puts("");
+        exit(1);
     }
     puts("-------------------------------------------------------------");
     /* Decryption */
     for(int i = 0; i < ROUNDS; i++)
     {
         printf(" * AES Decryption Round %2d\n", i);
-        uint16_t output[16] = { 0 };
-        aes_decrypt(TEST_KEY, TEST_OUTPUT[0], output);
+        uint8_t state[16] = { 0 };
+        memcpy(state, TEST_OUTPUT, 16U);
+        aes_decrypt(TEST_KEY, state);
         for(int j = 0; j < 16; j++)
         {
-            if(output[j] != TEST_INPUT[i][j])
+            if(state[j] != TEST_INPUT[i][j])
             {
                 printf("  x Round %d, Block %2d do not match: 0x%02x != 0x%02x\n",
-                    i, j, output[j], TEST_OUTPUT[i][j]);
+                    i, j, state[j], TEST_OUTPUT[i][j]);
             }
             else
                 puts("  * OK");
