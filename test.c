@@ -23,7 +23,7 @@ main(void)
         aes_encrypt(TEST_KEY, state);
         for(int j = 0; j < 16; j++)
         {
-            if(state[j+(j*4)] != TEST_OUTPUT[i][+(j*4)])
+            if(state[j+(j*4)] != TEST_OUTPUT[i][j+(j*4)])
             {
                 printf("  x Round %d, Block %2d do not match: 0x%02x != 0x%02x\n",
                     i, j, state[j+(j*4)], TEST_OUTPUT[i][+(j*4)]);
