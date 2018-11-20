@@ -454,6 +454,27 @@ main(void)
     puts("");
     puts("* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *");
 
+    uint8_t mixed_column_inputs[4] = { 0x0e, 0x0b, 0x0d, 0x09 };
+    for(int i = 0; i < 4; i++)
+    {
+        puts("* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *");
+        printf("* MULTIPLIKATION TABLE FOR 0x%02X\n", mixed_column_inputs[i]);
+        puts("* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *");
+        uint8_t multi[256] = { 0 };
+        for(int j = 0; j < 256; j++)
+        {
+            multi[j] = aes_polynomial_division(multiply_polynomial(mixed_column_inputs[i], j));
+        }
+        for(int j = 0; j < 256; j++)
+        {
+            if(j % 16 == 0 && j > 0)
+                puts("");
+            printf("0x%02X, ", multi[j]);
+        }
+        puts("");
+        puts("* * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * *");
+    }    
+
     puts("END OF PROGRAM");
     return 0;
 }
