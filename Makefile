@@ -21,7 +21,7 @@ run: $(OBJ)
 	$(CC) $(CFLAGS) -c main.c -o .obj/main.o
 	$(CC) $(CFLAGS) $(LDFLAGS) $(OBJ) .obj/main.o -o run
 
-test: $(OBJ)
+test: clean $(OBJ)
 	$(CC) $(CFLAGS) -c test.c -o .obj/test.o
 	$(CC) $(CFLAGS) $(LDFLAGS) $(OBJ) .obj/test.o -o run_test
 	./run_test
