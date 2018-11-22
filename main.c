@@ -69,6 +69,9 @@ int main(int argc, char **argv)
     memcpy(cbc, IV, 16U);
 #endif
 
+    /* Initialize the library */
+    aes_init(STATIC_KEY);
+
     /* The main routines */
     if (decrypt == false)
     {
@@ -83,7 +86,7 @@ int main(int argc, char **argv)
                 for(int i = 0; i < 16; i++)
                     state[i] ^= cbc[i];
 #endif
-                aes_encrypt(STATIC_KEY, state);
+                aes_encrypt(state);
                 for(int i = 0; i < 16; i++)
                     putchar(state[i]);
 #if CIPHER_BLOCK_CHAINING == 1
@@ -112,7 +115,7 @@ int main(int argc, char **argv)
                 for(int i = 0; i < 16; i++)
                     cbc_state[i] = state[i];
 #endif
-                aes_decrypt(STATIC_KEY, state);
+                aes_decrypt(state);
 #if CIPHER_BLOCK_CHAINING == 1
                 for(int i = 0; i < 16; i++)
                     state[i] ^= cbc[i];
