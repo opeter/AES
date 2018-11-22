@@ -1,6 +1,57 @@
+/*
+ * LibAES - libaes.c
+ * 
+ * ADVANCED ENCRYPTION STANDARD (AES) Library in C
+ *                          oliver.peter / 2018-11
+ * 
+ * The aes_encrypt() and aes_decrypt functions take
+ * pointers to a 16^2 uint8_t key and a 16^2 input
+ * (a so called "state") as parameters.
+ * 
+ */
+
 #include "libaes.h"
 
-/* Defines if algorithm has been initialized already */
+/*
+ * Private function definitions
+ */
+
+/* Key related functions */
+static void key_schedule(const uint8_t *key);
+static void key_addition(uint32_t *key, uint8_t *state);
+
+/* Generic AES functions */
+static void rotate_word(uint32_t *aes_word);
+
+/* AES Layers during encryption */
+static void byte_substitution(uint8_t *state);
+static void shift_rows(uint8_t *state);
+static void mix_column(uint8_t *state);
+
+/* AES Layers during decryption */
+static void inv_byte_substitution(uint8_t *state);
+static void inv_shift_rows(uint8_t *state);
+static void inv_mix_column(uint8_t *state);
+
+#if AES_CALCULATE_LOOKUP_TABLES == 1
+/* Finite field arithemtics */
+static int8_t get_shifts(uint16_t *factor);
+static uint8_t lsr8(uint8_t k, uint8_t p);
+static uint8_t aes_polynomial_division(uint16_t *factor);
+static uint8_t multiplicative_inverse(uint8_t input);
+static uint16_t multiply_polynomial(uint8_t factor1, uint8_t factor2);
+
+/* Library initialization */
+static void gen_rc_table(void);
+static void gen_bytesub(void);
+static void gen_inv_bytesub(void);
+static void gen_multiplication(void);
+#endif
+
+/*
+ * Defines if the lookup tables and key schedule
+ * have been initialized already
+ */
 uint8_t INITIALIZED = 0;
 
 /* AES Key Schedule */
@@ -56,7 +107,7 @@ static const uint8_t AES_INV_BYTE_SUB[16][16] = {
 uint8_t AES_INV_BYTE_SUB[16][16] = { { 0 } };
 #endif
 
-/* Multiplikation table for 0x02 in GF(2^8) */
+/* Multiplication table for 0x02 in GF(2^8) */
 #if AES_CALCULATE_LOOKUP_TABLES == 0
 static const uint8_t MULTIPLY_0x2[256] = {
   // 0x0,  0x1,  0x2,  0x3,  0x4,  0x5,  0x6,  0x7,  0x8,  0x9,  0xA,  0xB,  0xC,  0xD,  0xE,  0xF,
@@ -81,7 +132,7 @@ static const uint8_t MULTIPLY_0x2[256] = {
 uint8_t MULTIPLY_0x2[256]  = { 0 };
 #endif
 
-/* Multiplikation table for 0x03 in GF(2^8) */
+/* Multiplication table for 0x03 in GF(2^8) */
 #if AES_CALCULATE_LOOKUP_TABLES == 0
 static const uint8_t MULTIPLY_0x3[256] = {
   // 0x0,  0x1,  0x2,  0x3,  0x4,  0x5,  0x6,  0x7,  0x8,  0x9,  0xA,  0xB,  0xC,  0xD,  0xE,  0xF,
@@ -106,7 +157,7 @@ static const uint8_t MULTIPLY_0x3[256] = {
 uint8_t MULTIPLY_0x3[256] = { 0 };
 #endif
 
-/* Multiplikation table for 0xE in GF(2^8) */
+/* Multiplication table for 0xE in GF(2^8) */
 #if AES_CALCULATE_LOOKUP_TABLES == 0
 static const uint8_t MULTIPLY_0xE[256] = {
   // 0x0,  0x1,  0x2,  0x3,  0x4,  0x5,  0x6,  0x7,  0x8,  0x9,  0xA,  0xB,  0xC,  0xD,  0xE,  0xF,
@@ -131,7 +182,7 @@ static const uint8_t MULTIPLY_0xE[256] = {
 uint8_t MULTIPLY_0xE[256] = { 0 };
 #endif
 
-/* Multiplikation table for 0x9 in GF(2^8) */
+/* Multiplication table for 0x9 in GF(2^8) */
 #if AES_CALCULATE_LOOKUP_TABLES == 0
 static const uint8_t MULTIPLY_0x9[256] = {
   // 0x0,  0x1,  0x2,  0x3,  0x4,  0x5,  0x6,  0x7,  0x8,  0x9,  0xA,  0xB,  0xC,  0xD,  0xE,  0xF,
@@ -156,7 +207,7 @@ static const uint8_t MULTIPLY_0x9[256] = {
 uint8_t MULTIPLY_0x9[256] = { 0 };
 #endif
 
-/* Multiplikation table for 0xB in GF(2^8) */
+/* Multiplication table for 0xB in GF(2^8) */
 #if AES_CALCULATE_LOOKUP_TABLES == 0
 static const uint8_t MULTIPLY_0xB[256] = {
   // 0x0,  0x1,  0x2,  0x3,  0x4,  0x5,  0x6,  0x7,  0x8,  0x9,  0xA,  0xB,  0xC,  0xD,  0xE,  0xF,
@@ -181,7 +232,7 @@ static const uint8_t MULTIPLY_0xB[256] = {
 uint8_t MULTIPLY_0xB[256] = { 0 };
 #endif
 
-/* Multiplikation table for 0xD in GF(2^8) */
+/* Multiplication table for 0xD in GF(2^8) */
 #if AES_CALCULATE_LOOKUP_TABLES == 0
 static const uint8_t MULTIPLY_0xD[256] = {
   // 0x0,  0x1,  0x2,  0x3,  0x4,  0x5,  0x6,  0x7,  0x8,  0x9,  0xA,  0xB,  0xC,  0xD,  0xE,  0xF,
@@ -216,109 +267,62 @@ static const uint32_t RC[10] = {
 uint32_t RC[10] = { 0 };
 #endif
 
+/*
+ *  ____  ____  _____     ___  _____ _____ 
+ * |  _ \|  _ \|_ _\ \   / / \|_   _| ____|
+ * | |_) | |_) || | \ \ / / _ \ | | |  _|  
+ * |  __/|  _ < | |  \ V / ___ \| | | |___ 
+ * |_|   |_| \_\___|  \_/_/   \_\_| |_____|
+ */
 
-/* Main AES Encryption Routine */
-uint8_t
-aes_encrypt(const uint8_t *key, uint8_t *state)
+/* Debug function */
+#if DEBUG == 1
+static void
+show_state(uint8_t *state)
 {
-    // Initialize Key Schedule
-    aes_init(key);
-
-    /* Key Whitening */
-    key_addition(AES_KEY_SCHEDULE[0], state);
-
-    /*
-     * Last round lacks MixColumn Layer so
-     * we stay under AES_ROUNDS times (<)
-     */
-    for(int i = 1; i < AES_ROUNDS; i++)
-    {
-        byte_substitution(state);
-        shift_rows(state);
-        mix_column(state);
-        key_addition(AES_KEY_SCHEDULE[i], state);
-    }
-    /* Last Round */
-    byte_substitution(state);
-    shift_rows(state);
-    key_addition(AES_KEY_SCHEDULE[AES_ROUNDS], state);
-
-    /* AES Encryption Finished */
-    return 0;
+    for(int i = 0; i < 16; i++, state++)
+        printf("%02x", *state);
+    puts("");
+    return;
 }
+#endif
 
-// void
-// show_state(uint8_t *state)
-// {
-//     for(int i = 0; i < 16; i++, state++)
-//         printf("%02x", *state);
-//     puts("");
-//     return;
-// }
-
-/* Main AES Decryption Routine */
-uint8_t
-aes_decrypt(const uint8_t *key, uint8_t *state)
+/* "left-shift-rotate" a 8bit block k */
+#if AES_CALCULATE_LOOKUP_TABLES == 1
+static uint8_t
+lsr8(uint8_t k, uint8_t p)
 {
-    // Initialize Key Schedule
-    aes_init(key);
-
-    /* Last round without Mix Column */
-    key_addition(AES_KEY_SCHEDULE[AES_ROUNDS], state);
-    inv_shift_rows(state);
-    inv_byte_substitution(state);
-    /* Inverse AES_ROUNDS -1 */
-    for(int i = AES_ROUNDS-1; i > 0; i--)
-    {
-        key_addition(AES_KEY_SCHEDULE[i], state);
-        inv_mix_column(state);
-        inv_shift_rows(state);
-        inv_byte_substitution(state);
-    }
-
-    /* Invert Key Whitening */
-    key_addition(AES_KEY_SCHEDULE[0], state);
-
-    /* AES Decryption Finished */
-    return 0;
+    while(p--)
+        k = ((k << 1) & 0x0FE) | ((k >> 7) & 0x1);
+    return k;
 }
+#endif
 
-/* Initialize Global Key Schedule */
-uint8_t
-aes_init(const uint8_t *key)
+/* Left-Shift-Rotate a uint32_t aka AES Word */
+static void
+rotate_word(uint32_t *aes_word)
 {
-    if(INITIALIZED == 0)
-    {
-        #if AES_CALCULATE_LOOKUP_TABLES == 1
-        gen_rcon_table();
-        gen_bytesub();
-        gen_inv_bytesub();
-        gen_multiplication();
-        #endif
-        key_schedule(key);
-        INITIALIZED = 1;
-    }
-    return 0;
+    *aes_word = (*aes_word << 8) | ((*aes_word >> 24) & 0xFF);
 }
 
 /* AES Key schedule */
-int8_t
+static void
 key_schedule(const uint8_t *key)
 {
-    // Fill in w0, w1, w2, w4
+    /* The first sub key is the unaltered key */
     uint32_t *wi = AES_KEY_SCHEDULE[0];
     for(int i = 0; i < 16; i++)
     {
         *wi = *wi << 8 | key[i];
-        if(i % AES_NK == (AES_NK-1))
+        if(i % AES_SUBKEY_PARTS == (AES_SUBKEY_PARTS-1))
             wi++;
     }
 
-    // Start actual key schedule iterations
+    /* The actual key schedule iterations */
     for(int i = 0; i < AES_WI_RUNS; i++)
     {
         uint32_t temp = *(wi-1);
-        if(i % AES_NK == 0)
+        if(i % AES_SUBKEY_PARTS == 0)
         {
             rotate_word(&temp);
             uint32_t sub[4] = { 0 };
@@ -327,19 +331,255 @@ key_schedule(const uint8_t *key)
             sub[2] = SUB_BYTE(temp >>  8 & 0xFF) << 8;
             sub[3] = SUB_BYTE(temp       & 0xFF);
             temp = sub[0] | sub[1] | sub[2] | sub[3];
-            temp ^= AES_RC(i / AES_NK);
+            temp ^= AES_RC(i / AES_SUBKEY_PARTS);
         }
-        *wi = *(wi-AES_NK) ^ temp;
+        *wi = *(wi - AES_SUBKEY_PARTS) ^ temp;
         wi++;
     }
-    return 0;
+    return;
 }
 
-/* Left-Shift-Rotate a uint32_t aka AES Word */
-void
-rotate_word(uint32_t *aes_word)
+/* Key Addition Layer */
+static void
+key_addition(uint32_t *key, uint8_t *state)
 {
-    *aes_word = (*aes_word << 8) | ((*aes_word >> 24) & 0xFF);
+    /* We have to work with columns instead of rows here */
+    for(int i = 0; i < 4; i++)
+    {
+        /*
+         * Word State is a 16 16bit integer
+         * array j becomes the column offset
+         */
+        uint8_t *ws = state + i;
+
+        /*
+         * GF(2^8) arithmetic:
+         * Add the word key to the word state
+         */
+        for(int j = 0; j < 4; j++)
+        {
+            /* Form the current Word Key */
+            uint32_t ck = key[j];
+            uint16_t wk = (ck >> (24 - (i*8)) & 0xFF);
+            *ws ^= wk;
+            ws = ws + 4;    /* jump to next column */
+        }
+    }
+    return;
+}
+
+/* Byte Substitution layer */
+static void
+byte_substitution(uint8_t *state)
+{
+    for(int i = 0; i < 16; i++, state++)
+        *state = SUB_BYTE(*state);
+    return;
+}
+
+/* Shift Row Layer */
+static void
+shift_rows(uint8_t *state)
+{
+    /*
+        b00 b04 b08 b12 => b00 b04 b08 b12
+        b01 b05 b09 b13 => b05 b09 b13 b01
+        b02 b06 b10 b14 => b10 b14 b02 b06
+        b03 b07 b11 b15 => b15 b03 b07 b11
+    */
+
+    uint8_t temp = 0;
+
+    /* First row remains untouched */
+    /* noop */
+
+    /* Second row gets shifted by one */
+    temp      = state[1];
+    state[1]  = state[5];
+    state[5]  = state[9];
+    state[9]  = state[13];
+    state[13] = temp;
+
+    /* Third row gets shifted by two */
+    temp      = state[2];
+    state[2]  = state[10];
+    state[10] = temp;
+    
+    temp      = state[6];
+    state[6]  = state[14];
+    state[14] = temp;
+
+    /* Fourth row gets shifted by three */
+    temp      = state[3];
+    state[3]  = state[15];
+    state[15] = temp;
+
+    temp      = state[7];
+    state[7]  = state[15];
+    state[15] = temp;
+
+    temp      = state[11];
+    state[11] = state[15];
+    state[15] = temp;
+
+    return;
+}
+
+/* Mix Column Layer */
+static void
+mix_column(uint8_t *state)
+{
+    /* We work on 4 rows containing 4x16 bit states */
+    for(int i = 0; i < 4; i++)
+    {
+        /*
+            b0 b4  b8 b12 ^ 02 03 01 01
+            b1 b5  b9 b13 ^ 01 02 03 01
+            b2 b6 b10 b14 ^ 01 01 02 03
+            b3 b7 b11 b15 ^ 03 01 01 02
+        */
+
+        /* Calculations require unaltered input so 
+         * we have to keep track of the original and
+         * new states somewhere
+         */
+        uint8_t temp[4] = { 0 };
+        uint8_t *pstate = state + (i*4);    /* i*4 means next column */
+
+        /* First 16bit state */
+        temp[0] =
+            AES_MULTIPLY_0x2(*(pstate+0)) ^ AES_MULTIPLY_0x3(*(pstate+1)) ^
+            *(pstate+2) ^ *(pstate+3);
+
+        /* Second 16bit state */
+        temp[1] =
+            *(pstate+0) ^ AES_MULTIPLY_0x2(*(pstate+1)) ^
+            AES_MULTIPLY_0x3(*(pstate+2)) ^ *(pstate+3);
+
+        /* Third 16bit state */
+        temp[2] =
+            *(pstate+0) ^ *(pstate+1) ^ 
+            AES_MULTIPLY_0x2(*(pstate+2)) ^ AES_MULTIPLY_0x3(*(pstate+3));
+
+        /* Fourth 16bit state */
+        temp[3] =
+            AES_MULTIPLY_0x3(*(pstate+0)) ^ *(pstate+1) ^
+            *(pstate+2) ^ AES_MULTIPLY_0x2(*(pstate+3));
+
+        /* Finally overwrite the states */
+        *(pstate+0) = temp[0];
+        *(pstate+1) = temp[1];
+        *(pstate+2) = temp[2];
+        *(pstate+3) = temp[3];
+    }
+    return;
+}
+
+/* Inverse Byte Substitution layer */
+static void
+inv_byte_substitution(uint8_t *state)
+{
+    for(int i = 0; i < 16; i++, state++)
+        *state = INV_SUB_BYTE(*state);
+    return;
+}
+
+/* Inverse Shift Rows layer */
+static void
+inv_shift_rows(uint8_t *state)
+{
+    /*
+        b00 b04 b08 b12 => b00 b04 b08 b12
+        b05 b09 b13 b01 => b01 b05 b09 b13
+        b10 b14 b02 b06 => b02 b06 b10 b14
+        b15 b03 b07 b11 => b03 b07 b11 b15
+    */
+
+    uint8_t temp = 0;
+
+    /* First row remains untouched */
+    /* noop */
+
+    /* Second row gets shifted by one */
+    temp      = state[13];
+    state[13] = state[9];
+    state[9]  = state[5];
+    state[5]  = state[1];
+    state[1]  = temp;
+
+    /* Third row gets shifted by two */
+    temp      = state[10];
+    state[10] = state[2];
+    state[2]  = temp;
+
+    temp      = state[14];
+    state[14] = state[6];
+    state[6]  = temp;
+    
+    /* Fourth row gets shifted by three */
+    temp      = state[15];
+    state[15] = state[11];
+    state[11] = temp;
+
+    temp      = state[15];
+    state[15] = state[7];
+    state[7]  = temp;
+
+    temp      = state[15];
+    state[15] = state[3];
+    state[3]  = temp;
+
+    return;
+}
+
+/* Inverse Mix Column layer */
+static void
+inv_mix_column(uint8_t *state)
+{
+    /* We work on 4 rows containing 4x16 bit states */
+    for(int i = 0; i < 4; i++)
+    {
+        /*
+            b0 b4  b8 b12 ^ 0e 0b 0d 09
+            b1 b5  b9 b13 ^ 09 0e 0b 0d
+            b2 b6 b10 b14 ^ 0d 09 0e 0b
+            b3 b7 b11 b15 ^ 0b 0d 09 0e
+        */
+
+        /* Calculations require unaltered input so 
+         * we have to keep track of the original and
+         * new states somewhere
+         */
+        uint8_t temp[4] = { 0 };
+        uint8_t *pstate = state + (i*4);    /* i*4 means next column */
+
+        /* First 16bit state */
+        temp[0] =
+            AES_MULTIPLY_0xE(*(pstate+0)) ^ AES_MULTIPLY_0xB(*(pstate+1)) ^
+            AES_MULTIPLY_0xD(*(pstate+2)) ^ AES_MULTIPLY_0x9(*(pstate+3));
+
+        /* Second 16bit state */
+        temp[1] =
+            AES_MULTIPLY_0x9(*(pstate+0)) ^ AES_MULTIPLY_0xE(*(pstate+1)) ^
+            AES_MULTIPLY_0xB(*(pstate+2)) ^ AES_MULTIPLY_0xD(*(pstate+3));
+
+        /* Third 16bit state */
+        temp[2] =
+            AES_MULTIPLY_0xD(*(pstate+0)) ^ AES_MULTIPLY_0x9(*(pstate+1)) ^
+            AES_MULTIPLY_0xE(*(pstate+2)) ^ AES_MULTIPLY_0xB(*(pstate+3));
+
+        /* Fourth 16bit state */
+        temp[3] =
+            AES_MULTIPLY_0xB(*(pstate+0)) ^ AES_MULTIPLY_0xD(*(pstate+1)) ^
+            AES_MULTIPLY_0x9(*(pstate+2)) ^ AES_MULTIPLY_0xE(*(pstate+3));
+
+        /* Finally overwrite the states */
+        *(pstate+0) = temp[0];
+        *(pstate+1) = temp[1];
+        *(pstate+2) = temp[2];
+        *(pstate+3) = temp[3];
+    }
+    return;
 }
 
 /* Retrieve the position of the left most bit */
@@ -402,20 +642,20 @@ multiply_polynomial(uint8_t factor1, uint8_t factor2)
 }
 #endif
 
-/* Calculate the Multiplicative of a Byte in GF(2^8) */
+/* Calculate the "Multiplicative Inverse" of a Byte in GF(2^8) */
 #if AES_CALCULATE_LOOKUP_TABLES == 1
 uint8_t
 multiplicative_inverse(uint8_t input)
 {
-    /* 0 maps to 0x63; */
+    /* 0 maps to 0^0x63 */
     if(input == 0)
-        return 0^0x63;
+        return 0x63;
 
     /*
      * Create logarithm chart
      */
     uint16_t poly = 1;
-    uint8_t logarithm[16][16] = { { 0 } };  // 0xF * 0xF Elements
+    uint8_t logarithm[16][16] = { { 0 } };  // 0xF * 0xF elements
     for(int i = 1; i < 255; i++)
     {
         poly = multiply_polynomial(poly, AES_GENERATOR);
@@ -428,7 +668,7 @@ multiplicative_inverse(uint8_t input)
     uint8_t x = input & 0xF;
     uint8_t y = input >> 4;
     uint8_t k = logarithm[y][x];
-    k ^= 0xFF;  // substract 255 in GF(2^8)
+    k ^= 0xFF;  /* Substract 255 in GF(2^8) */
     uint16_t result = 1;
     for(int j = 0; j < k; j++)
     {
@@ -443,20 +683,9 @@ multiplicative_inverse(uint8_t input)
 }
 #endif
 
-/* left shift rotate a 8bit block k */
-#if AES_CALCULATE_LOOKUP_TABLES == 1
-uint8_t
-lsr8(uint8_t k, uint8_t p)
-{
-    while(p--)
-        k = ((k << 1) & 0x0FE) | ((k >> 7) & 0x1);
-    return k;
-}
-#endif
-
 /* Generate and fill global AES Byte Substitution Table */
 #if AES_CALCULATE_LOOKUP_TABLES == 1
-void
+static void
 gen_bytesub(void)
 {
     for(int i = 0; i < 256; i++)
@@ -472,7 +701,7 @@ gen_bytesub(void)
 
 /* Inverse the Byte Substitution Table */
 #if AES_CALCULATE_LOOKUP_TABLES == 1
-void
+static void
 gen_inv_bytesub(void)
 {
     for(int i = 0; i < 256; i++)
@@ -488,206 +717,28 @@ gen_inv_bytesub(void)
 }
 #endif
 
-/* RCON Lookup Table for key Schedule */
+/* Round coefficient lookup table for key Schedule */
 #if AES_CALCULATE_LOOKUP_TABLES == 1
-void
-gen_rcon_table(void)
+static void
+gen_rc_table(void)
 {
     for(int j = 0; j < AES_WI_RUNS; j++)
     {
-        if(j % AES_NK == 0)
+        if(j % AES_SUBKEY_PARTS == 0)
         {
-            uint32_t rcon = 1 << (j / AES_NK );
+            uint32_t rcon = 1 << (j / AES_SUBKEY_PARTS );
             rcon = aes_polynomial_division((uint16_t *) &rcon);
             rcon <<= 24;
-            RC[j / AES_NK] = rcon;
+            RC[j / AES_SUBKEY_PARTS] = rcon;
         }
     }
     return;
 }
 #endif
 
-/* Exponent in GF(2^8) */
-#if AES_CALCULATE_LOOKUP_TABLES == 1
-uint16_t
-exp_polynomial(uint16_t factor, uint8_t exponent)
-{
-    if(exponent == 0)
-        return 0;
-    uint16_t result = factor;
-    for(int i = 0; i < exponent; i++)
-    {
-        result = multiply_polynomial(result, exponent);
-        result = aes_polynomial_division(&result);
-    }
-    return result;
-}
-#endif
-
-/* Key Addition Layer */
-int8_t
-key_addition(uint32_t *key, uint8_t *state)
-{
-    /*
-     * Take these 4x16bits from current state:
-     *  ->
-     * 1 0 0 0
-     * 1 0 0 0
-     * 1 0 0 0
-     * 1 0 0 0
-     */
-
-    /*
-     * key is a 4x32bit array
-     * We want to have the i-th column of the word array
-     * 
-     * 1. 0xFF000000 0xFF000000 0xFF000000 0xFF000000
-     * 2. 0x00FF0000 0x00FF0000 0x00FF0000 0x00FF0000
-     * 3. 0x0000FF00 0x0000FF00 0x0000FF00 0x0000FF00
-     * 4. 0x000000FF 0x000000FF 0x000000FF 0x000000FF
-     * 
-     */
-    for(int i = 0; i < 4; i++)
-    {
-        /*
-         * Word State is a 16 16bit integer
-         * array j becomes the column offset
-         */
-        uint8_t *ws = state + i;
-
-        /* GF(2^8) Add the word key to the word state */
-        for(int j = 0; j < 4; j++)
-        {
-            /* Form the current Word Key */
-            uint32_t ck = key[j];
-            uint16_t wk = (ck >> (24 - (i*8)) & 0xFF);
-            *ws ^= wk;
-            ws = ws + 4;    /* jump to next column */
-        }
-    }
-    return 0;
-}
-
-/* Byte Substitution Layer */
-int8_t
-byte_substitution(uint8_t *state)
-{
-    for(int i = 0; i < 16; i++, state++)
-        *state = SUB_BYTE(*state);
-    return 0;
-}
-
-/* Shift Row Layer */
-int8_t
-shift_rows(uint8_t *state)
-{
-    /*
-        b00 b04 b08 b12
-        b01 b05 b09 b13
-        b02 b06 b10 b14
-        b03 b07 b11 b15
-
-        becomes
-
-        b00 b04 b08 b12
-        b05 b09 b13 b01
-        b10 b14 b02 b06
-        b15 b03 b07 b11
-    */
-
-    uint8_t temp = 0;
-
-    /* First row remains untouched */
-    /* noop */
-
-    /* Second row gets shifted by one */
-    // b1 b5 b9 b13 --> b5 b9 b13 b1
-    temp      = state[1];
-    state[1]  = state[5];
-    state[5]  = state[9];
-    state[9]  = state[13];
-    state[13] = temp;
-
-    /* Third row gets shifted by two */
-    // b2 b6 b10 b14 --> b10 b14 b2 b6
-    temp      = state[2];
-    state[2]  = state[10];
-    state[10] = temp;
-    
-    temp      = state[6];
-    state[6]  = state[14];
-    state[14] = temp;
-
-    /* Fourth row gets shifted by three */
-    // b3 b7 b11 b15 --> b15 b3 b7 b11
-    temp      = state[3];
-    state[3]  = state[15];
-    state[15] = temp;
-
-    temp      = state[7];
-    state[7]  = state[15];
-    state[15] = temp;
-
-    temp      = state[11];
-    state[11] = state[15];
-    state[15] = temp;
-
-    return 0;
-}
-
-/* Mix Column Layer */
-int8_t
-mix_column(uint8_t *state)
-{
-    for(int i = 0; i < 4; i++)
-    {
-        /*
-            b0 b4  b8 b12
-            b1 b5  b9 b13
-            b2 b6 b10 b14
-            b3 b7 b11 b15
-
-            02 03 01 01
-            01 02 03 01
-            01 01 02 03
-            03 01 01 02
-        */
-
-        /* Calculations require unaltered input so 
-         * we have to keep track of the original and
-         * new states somewhere
-         */
-        uint8_t temp[4] = { 0 };
-        uint8_t *pstate = state + (i*4);    /* i*4 means next column */
-
-        temp[0] =
-            AES_MULTIPLY_0x2(*(pstate+0)) ^ AES_MULTIPLY_0x3(*(pstate+1)) ^
-            *(pstate+2) ^ *(pstate+3);
-
-        temp[1] =
-            *(pstate+0) ^ AES_MULTIPLY_0x2(*(pstate+1)) ^
-            AES_MULTIPLY_0x3(*(pstate+2)) ^ *(pstate+3);
-
-        temp[2] =
-            *(pstate+0) ^ *(pstate+1) ^ 
-            AES_MULTIPLY_0x2(*(pstate+2)) ^ AES_MULTIPLY_0x3(*(pstate+3));
-
-        temp[3] =
-            AES_MULTIPLY_0x3(*(pstate+0)) ^ *(pstate+1) ^
-            *(pstate+2) ^ AES_MULTIPLY_0x2(*(pstate+3));
-
-        *(pstate+0) = temp[0];
-        *(pstate+1) = temp[1];
-        *(pstate+2) = temp[2];
-        *(pstate+3) = temp[3];
-
-    }
-    return 0;
-}
-
 /* Generate Multiplication tables of 0x02 and 0x03 under GF(2^8) */
 #if AES_CALCULATE_LOOKUP_TABLES == 1
-void
+static void
 gen_multiplication(void)
 {
     for(int i = 0; i < 256; i++)
@@ -721,119 +772,94 @@ gen_multiplication(void)
 }
 #endif
 
-/* Inverse Byte Substitution */
-int8_t
-inv_byte_substitution(uint8_t *state)
+/* Library initialization */
+uint8_t
+aes_init(const uint8_t *key)
 {
-    for(int i = 0; i < 16; i++, state++)
-        *state = INV_SUB_BYTE(*state);
-    return 0;
-}
-
-/* Inverse Shift Rows */
-int8_t
-inv_shift_rows(uint8_t *state)
-{
-    /*
-        b00 b04 b08 b12
-        b05 b09 b13 b01
-        b10 b14 b02 b06
-        b15 b03 b07 b11
-
-        becomes
-
-        b00 b04 b08 b12
-        b01 b05 b09 b13
-        b02 b06 b10 b14
-        b03 b07 b11 b15
-    */
-
-    uint8_t temp = 0;
-
-    /* First row remains untouched */
-    /* noop */
-
-    /* Second row gets shifted by one */
-    // b5 b9 b13 b1 --> b1 b5 b9 b13 
-    temp      = state[13];
-    state[13] = state[9];
-    state[9]  = state[5];
-    state[5]  = state[1];
-    state[1]  = temp;
-
-    /* Third row gets shifted by two */
-    // b10 b14 b2 b6 --> b2 b6 b10 b14
-    temp      = state[10];
-    state[10] = state[2];
-    state[2]  = temp;
-
-    temp      = state[14];
-    state[14] = state[6];
-    state[6]  = temp;
-    
-    /* Fourth row gets shifted by three */
-    // b15 b3 b7 b11 --> b3 b7 b11 b15
-    temp      = state[15];
-    state[15] = state[11];
-    state[11] = temp;
-
-    temp      = state[15];
-    state[15] = state[7];
-    state[7]  = temp;
-
-    temp      = state[15];
-    state[15] = state[3];
-    state[3]  = temp;
-
-    return 0;
-}
-
-/* Inverse Mix Column */
-int8_t
-inv_mix_column(uint8_t *state)
-{
-    for(int i = 0; i < 4; i++)
+    /* Library needs to be initialized */
+    if(INITIALIZED == 0)
     {
-        /*
-            b0 b4  b8 b12
-            b1 b5  b9 b13
-            b2 b6 b10 b14
-            b3 b7 b11 b15
-
-            0e 0b 0d 09
-            09 0e 0b 0d
-            0d 09 0e 0b
-            0b 0d 09 0e
-        */
-
-        /* Calculations require unaltered input so 
-         * we have to keep track of the original and
-         * new states somewhere
-         */
-        uint8_t temp[4] = { 0 };
-        uint8_t *pstate = state + (i*4);    /* i*4 means next column */
-
-        temp[0] =
-            AES_MULTIPLY_0xE(*(pstate+0)) ^ AES_MULTIPLY_0xB(*(pstate+1)) ^
-            AES_MULTIPLY_0xD(*(pstate+2)) ^ AES_MULTIPLY_0x9(*(pstate+3));
-
-        temp[1] =
-            AES_MULTIPLY_0x9(*(pstate+0)) ^ AES_MULTIPLY_0xE(*(pstate+1)) ^
-            AES_MULTIPLY_0xB(*(pstate+2)) ^ AES_MULTIPLY_0xD(*(pstate+3));
-
-        temp[2] =
-            AES_MULTIPLY_0xD(*(pstate+0)) ^ AES_MULTIPLY_0x9(*(pstate+1)) ^
-            AES_MULTIPLY_0xE(*(pstate+2)) ^ AES_MULTIPLY_0xB(*(pstate+3));
-
-        temp[3] =
-            AES_MULTIPLY_0xB(*(pstate+0)) ^ AES_MULTIPLY_0xD(*(pstate+1)) ^
-            AES_MULTIPLY_0x9(*(pstate+2)) ^ AES_MULTIPLY_0xE(*(pstate+3));
-
-        *(pstate+0) = temp[0];
-        *(pstate+1) = temp[1];
-        *(pstate+2) = temp[2];
-        *(pstate+3) = temp[3];
-
+        /* If needed:  Calculate lookup tables */
+        #if AES_CALCULATE_LOOKUP_TABLES == 1
+        gen_rc_table();
+        gen_bytesub();
+        gen_inv_bytesub();
+        gen_multiplication();
+        #endif
+        /* Initialize key schedule */
+        key_schedule(key);
+        INITIALIZED = 1;
+        return 0;
     }
+    /* Fail if library has been initialized already */
+    else
+        return -1;
+}
+
+/*
+ *  ____  _   _ ____  _     ___ ____ 
+ * |  _ \| | | | __ )| |   |_ _/ ___|
+ * | |_) | | | |  _ \| |    | | |    
+ * |  __/| |_| | |_) | |___ | | |___ 
+ * |_|    \___/|____/|_____|___\____|
+ * 
+ */
+
+/* Main AES Encryption Routine */
+uint8_t
+aes_encrypt(uint8_t *state)
+{
+    /* Immediately fail of library has not been initialized */
+    if(INITIALIZED == 0)
+        return -1;
+
+    /* Key whitening */
+    key_addition(AES_KEY_SCHEDULE[0], state);
+
+    /*
+     * Last round lacks mix_column layer so
+     * we have to stay under #AES_ROUNDS
+     */
+    for(int i = 1; i < AES_ROUNDS; i++)
+    {
+        byte_substitution(state);
+        shift_rows(state);
+        mix_column(state);
+        key_addition(AES_KEY_SCHEDULE[i], state);
+    }
+    /* Last round (without mix_column) */
+    byte_substitution(state);
+    shift_rows(state);
+    key_addition(AES_KEY_SCHEDULE[AES_ROUNDS], state);
+
+    /* AES Encryption finished */
+    return 0;
+}
+
+/* Main AES Decryption routine */
+uint8_t
+aes_decrypt(uint8_t *state)
+{
+    /* Immediately fail of library has not been initialized */
+    if(INITIALIZED == 0)
+        return -1;
+
+    /* Last round without inv_mix_column */
+    key_addition(AES_KEY_SCHEDULE[AES_ROUNDS], state);
+    inv_shift_rows(state);
+    inv_byte_substitution(state);
+    /* Inverse AES_ROUNDS -1 */
+    for(int i = AES_ROUNDS-1; i > 0; i--)
+    {
+        key_addition(AES_KEY_SCHEDULE[i], state);
+        inv_mix_column(state);
+        inv_shift_rows(state);
+        inv_byte_substitution(state);
+    }
+
+    /* Invert key whitening */
+    key_addition(AES_KEY_SCHEDULE[0], state);
+
+    /* AES Decryption finished */
     return 0;
 }
