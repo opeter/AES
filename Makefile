@@ -23,4 +23,4 @@ test: clean $(OBJ)
 	./run_test
 
 clean:
-	rm -f $(OBJ) *~ run
+	rm -f $(OBJ) *~ run run_test
