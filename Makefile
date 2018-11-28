@@ -1,11 +1,7 @@
 UNAME_S := $(shell uname -s)
 CFLAGS += -Wall -Werror
 CFLAGS += -O3
-CFLAGS += -g -fsanitize=address -fno-omit-frame-pointer
-# ifeq ($(UNAME_S),Linux)
-# 	LDFLAGS += -lbsd
-# endif
-# LDFLAGS += -lm
+#CFLAGS += -g -fsanitize=address -fno-omit-frame-pointer
 CC = clang
 SRC = libaes.c
 OBJ = $(addprefix .obj/, $(subst .c,.o,$(SRC)))
