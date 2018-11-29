@@ -6,11 +6,14 @@ The following articles will describe some of the history and mathematical backgr
 
 # Blog articles
 [Overview : Advanced Encryption Standard (AES, 2001)](https://www.gfuzz.de/index.php?/archives/16-Overview-Advanced-Encryption-Standard-AES,-2001.html)
+
 [AES (1/3): An Introduction to Galois Fields](https://www.gfuzz.de/index.php?/archives/13-AES-13-An-Introduction-to-Galois-Fields.html)
+
 [AES (2/3): A Description of AES Lookup Tables](https://www.gfuzz.de/index.php?/archives/15-AES-23-A-Description-of-AES-Lookup-Tables.html)
+
 [AES (3/3): Encryption and Decryption](https://www.gfuzz.de/index.php?/archives/14-AES-33-Encryption-and-Decryption.html)
 
-# Public library funcions
+# Public library functions
 A key has to be an array of 16x 8bit elements.
 ```c
 static const uint8_t key[16] =
@@ -43,5 +46,5 @@ An input state, for both enciphering and deciphering, has to be a pointer to a 1
 uint8_t aes_encrypt(uint8_t *state);
 uint8_t aes_decrypt(uint8_t *state);
 ```
-#License
+# License
 Educational purpose only.
